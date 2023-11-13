@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration debug="false" scan="true" scanPeriod="30 seconds">
+
+    <contextName>api-service</contextName>
+    <!-- 日志输出路径 -->
+    <property name="LOG_PATH" value="/mnt/logs/cm-tool" />
+    <!-- 格式化日志打印 -->
+    <property name="LOG_PATTERN_OLD"
+              value="%date %red([%thread]) %logColor(%-5level) %boldMagenta([%c{5}:%L]) - [%X{requestId}] %msg%n"/>
+    <property name="LOG_PATTERN"
+              value="%date %red([%thread]) %highlight(%-5level) %boldMagenta([%c{5}_%M:%L]) - [%X{X-B3-TraceId},%X{X-B3-SpanId}] %msg%n%ex{40}"/>
+    <!-- 日志输出到控制台 -->
+    <appender name="consoleLog" class="ch.qos.logback.core.ConsoleAppender">
+        <!--encoder 默认配置为PatternLayoutEncoder-->
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+        <!--临界值过滤器，开发使用，控制台输出的日志级别大于或等于此级别的日志信息-->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>debug</level>
+        </filter>
+    </appender>
+
+    <!-- 日志输出到info -->
+    <appender name="fileInfoLog" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!--encoder 默认配置为PatternLayoutEncoder-->
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+        <!-- 级别过滤器，只接受info级别-->
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>info</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <!--滚动策略-->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!--路径-->
+            <fileNamePattern>${LOG_PATTERN}</fileNamePattern>
+            <!--清理日志 保留90天-->
+            <maxHistory>90</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <!-- 日志输出到error -->
+    <appender name="fileErrorLog" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!--encoder 默认配置为PatternLayoutEncoder-->
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+        <!--临界值过滤器，只输出error级别-->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <!--滚动策略-->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!--路径-->
+            <fileNamePattern>${LOG_PATH}/%d{yyyy-MM-dd}.error.log</fileNamePattern>
+            <!--清理日志 保留90天-->
+            <maxHistory>90</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <appender name="scheduledLog" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!--encoder 默认配置为PatternLayoutEncoder-->
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>DENY</onMatch>
+            <onMismatch>ACCEPT</onMismatch>
+        </filter>
+        <!--滚动策略-->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!--路径-->
+            <fileNamePattern>${LOG_PATH}/%d{yyyy-MM-dd}.scheduled.log</fileNamePattern>
+            <!--清理日志 保留90天-->
+            <maxHistory>90</maxHistory>
+        </rollingPolicy>
+    </appender>
+    <!-- 定时任务日志单独打印 -->
+    <logger name="com.gomain.api.mq.scheduled" level="info"  additivity="false">
+        <appender-ref ref="consoleLog"/>
+        <appender-ref ref="scheduledLog"/>
+    </logger>
+
+    <!-- 禁止ConfigClusterResolver打印 -->
+    <logger name="com.netflix.discovery.shared.resolver.aws.ConfigClusterResolver" level="error" />
+
+    <root level="info">
+        <appender-ref ref="consoleLog"/>
+        <appender-ref ref="fileInfoLog"/>
+        <appender-ref ref="fileErrorLog"/>
+    </root>
+    <!-- 根据配置文件打印日志，有时候很麻烦 -->
+<!--    <springProfile name="dev">-->
+<!--        <root level="info">-->
+<!--            <appender-ref ref="consoleLog"/>-->
+<!--            <appender-ref ref="fileInfoLog"/>-->
+<!--            <appender-ref ref="fileErrorLog"/>-->
+<!--        </root>-->
+<!--    </springProfile>-->
+</configuration>
