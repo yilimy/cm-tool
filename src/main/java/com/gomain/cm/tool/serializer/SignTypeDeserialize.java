@@ -28,13 +28,12 @@ public class SignTypeDeserialize extends JsonDeserializer<Integer> {
         if (ObjectUtils.isEmpty(string)) {
             return describe;
         }
-        describe = switch (string) {
-            case SignTypeSerializer.GBT38540 -> SignTypeSerializer.TYPE_GBT38540;
-            case SignTypeSerializer.GBT35275 -> SignTypeSerializer.TYPE_GBT35275;
-            case SignTypeSerializer.GMT0031 -> SignTypeSerializer.TYPE_GMT0031;
-            case SignTypeSerializer.PKCS7 -> SignTypeSerializer.TYPE_PKCS;
-            default -> SignTypeSerializer.TYPE_UNKNOWN;
-        };
-        return describe;
+        switch (string) {
+            case SignTypeSerializer.GBT38540 : return SignTypeSerializer.TYPE_GBT38540;
+            case SignTypeSerializer.GBT35275 : return SignTypeSerializer.TYPE_GBT35275;
+            case SignTypeSerializer.GMT0031 : return SignTypeSerializer.TYPE_GMT0031;
+            case SignTypeSerializer.PKCS7 : return SignTypeSerializer.TYPE_PKCS;
+            default : return SignTypeSerializer.TYPE_UNKNOWN;
+        }
     }
 }
