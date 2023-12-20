@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--<include resource="org/springframework/boot/logging/logback/defaults.xml"/>-->
 <configuration debug="false" scan="true" scanPeriod="30 seconds">
-
-    <contextName>api-service</contextName>
+    <contextName>tool-service</contextName>
     <!-- 日志输出路径 -->
     <property name="LOG_PATH" value="/mnt/logs/cm-tool" />
     <!-- 格式化日志打印 -->
     <property name="LOG_PATTERN_OLD"
-              value="%date %red([%thread]) %logColor(%-5level) %boldMagenta([%c{5}:%L]) - [%X{requestId}] %msg%n"/>
+              value="%date %red([%thread]) %logColor(%-5level) %boldMagenta([%c{5}:%L]) - [%X{requestId}] %msg%n" />
     <property name="LOG_PATTERN"
-              value="%date %red([%thread]) %highlight(%-5level) %boldMagenta([%c{5}_%M:%L]) - [%X{X-B3-TraceId},%X{X-B3-SpanId}] %msg%n%ex{40}"/>
+              value="%date [%thread] %level [%c{5}_%M:%L] - [%X{X-B3-TraceId},%X{X-B3-SpanId}] %msg%n%ex{40}" />
     <!-- 日志输出到控制台 -->
     <appender name="consoleLog" class="ch.qos.logback.core.ConsoleAppender">
         <!--encoder 默认配置为PatternLayoutEncoder-->
