@@ -93,12 +93,4 @@
         <appender-ref ref="fileInfoLog"/>
         <appender-ref ref="fileErrorLog"/>
     </root>
-    <!-- 根据配置文件打印日志，有时候很麻烦 -->
-<!--    <springProfile name="dev">-->
-<!--        <root level="info">-->
-<!--            <appender-ref ref="consoleLog"/>-->
-<!--            <appender-ref ref="fileInfoLog"/>-->
-<!--            <appender-ref ref="fileErrorLog"/>-->
-<!--        </root>-->
-<!--    </springProfile>-->
 </configuration>
