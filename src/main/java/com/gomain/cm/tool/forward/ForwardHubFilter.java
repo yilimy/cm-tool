@@ -12,8 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpStatus;
+import org.apache.http.NameValuePair;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -24,6 +26,7 @@ import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.protocol.HTTP;
 import org.springframework.http.HttpMethod;
 import org.springframework.util.ObjectUtils;
@@ -40,11 +43,15 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -110,7 +117,7 @@ public class ForwardHubFilter implements Filter {
      * @param request 原请求
      * @param response 原响应
      */
-    @SneakyThrows({IOException.class})
+    @SneakyThrows({Exception.class})
     private void forwardFilter(HttpServletRequest request, HttpServletResponse response) {
         HttpRequestBase httpRequestBase;
         // 此处为 application/x-www-form-urlencoded
@@ -147,13 +154,8 @@ public class ForwardHubFilter implements Filter {
                 // multipart/form-data
                 copyMultipartFormData(request, httpRequestBase);
             } else {
-                /*
-                 * 表单方式: application/x-www-form-urlencoded，需要再调试。
-                 * e.g. /common/getJpgByPathName 接口使用的转发会使用该方式，没有将参数转发出去。
-                 * 但是该方案暂时废弃而没有调试。
-                 * @date 2023-12-29
-                 */
-                log.warn("不支持 application/json、multipart/form-data 之外的POST类型");
+                // 剩下的使用 x-www-form-urlencoded 方案去处理，其他请求暂不做枚举处理了
+                copyXWwwFormUrlencoded(request, httpRequestBase);
             }
         }
         // 5. 连接设置
@@ -269,6 +271,28 @@ public class ForwardHubFilter implements Filter {
             }
         }
         ((HttpPost) httpRequestBase).setEntity(entityBuilder.build());
+    }
+
+    /**
+     * 复制 POST 请求 application/x-www-form-urlencoded 请求方式中的请求数据
+     *
+     * @param request         待复制请求
+     * @param httpRequestBase 转发请求
+     */
+    private void copyXWwwFormUrlencoded(HttpServletRequest request, HttpRequestBase httpRequestBase) throws Exception{
+        // 该接口会将URL问号后面的参数一同获取到
+        Map<String, String[]> parameterMap = request.getParameterMap();
+        List<NameValuePair> params = new ArrayList<>();
+//        parameterMap.forEach((k, v) -> Stream.of(v).forEach(i -> params.add(new BasicNameValuePair(k, i))));
+        parameterMap.forEach((k, v) -> params.add(new BasicNameValuePair(k, String.join(",", v))));
+        UrlEncodedFormEntity entity = new UrlEncodedFormEntity(params);
+        ((HttpPost) httpRequestBase).setEntity(entity);
+        // 如果URL地址含有问号及参数，需要重置URI
+        URI uri = httpRequestBase.getURI();
+        if (Objects.nonNull(uri.getQuery())) {
+            URI replaceUri = new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null, uri.getFragment());
+            httpRequestBase.setURI(replaceUri);
+        }
     }
 
     /**
