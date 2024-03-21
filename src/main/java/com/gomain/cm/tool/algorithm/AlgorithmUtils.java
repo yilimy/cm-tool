@@ -10,10 +10,13 @@ import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.DERBitString;
 import org.bouncycastle.asn1.DERSequence;
 import org.bouncycastle.asn1.gm.GMObjectIdentifiers;
+import org.bouncycastle.asn1.x9.X9ObjectIdentifiers;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.crypto.signers.SM2Signer;
 import org.bouncycastle.jcajce.provider.asymmetric.util.ECUtil;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.pqc.math.linearalgebra.ByteUtils;
+import org.springframework.util.Assert;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -93,7 +96,7 @@ public class AlgorithmUtils {
     @SneakyThrows
     public static byte[] pkToDer(byte[] pk) {
         // id-ecPublicKey
-        ASN1ObjectIdentifier pkOid = new ASN1ObjectIdentifier("1.2.840.10045.2.1");
+        ASN1ObjectIdentifier pkOid = X9ObjectIdentifiers.id_ecPublicKey;
         // SM2
         ASN1ObjectIdentifier sm2Oid = GMObjectIdentifiers.sm2p256v1;
         // 公钥头
@@ -136,7 +139,7 @@ public class AlgorithmUtils {
     /**
      * 带公钥的摘要 <br>
      * 使用公钥对待摘要数据进行预处理  <br>
-     * 通过反射bc包中的 {@link org.bouncycastle.crypto.signers SM2Signer} 的私有方法实现 <br>
+     * 通过反射bc包中的 {@link org.bouncycastle.crypto.signers.SM2Signer SM2Signer} 的私有方法实现 <br>
      * @param pkDer 公钥结构
      * @param dataHash 待摘要数据
      * @return 公钥预处理后的摘要值
@@ -153,5 +156,71 @@ public class AlgorithmUtils {
         Method method = SM2Signer.class.getDeclaredMethod("digestDoFinal");
         method.setAccessible(true);
         return  (byte[]) method.invoke(sm2Signer);
+    }
+
+    /**
+     * 签名值或签名结构，转128位
+     * @param ssv 签名值或签名结构
+     * @return 128签名值
+     */
+    public static byte[] signValueTo128(byte[] ssv) {
+        Assert.notNull(ssv, "签名为空");
+        if (ssv.length == 64) {
+            // 旧版本签名值为64位，非DER编码
+            return signValue64To128(ssv);
+        }
+        try {
+            ASN1Sequence asn1Sequence = (ASN1Sequence) ASN1Sequence.fromByteArray(ssv);
+            ASN1Integer ra = (ASN1Integer) asn1Sequence.getObjectAt(0);
+            ASN1Integer sa = (ASN1Integer) asn1Sequence.getObjectAt(1);
+            byte[] r = encodeIntegerTo32Byte(ra.getEncoded());
+            byte[] s = encodeIntegerTo32Byte(sa.getEncoded());
+            return signValue64To128(ByteUtils.concatenate(r, s));
+        } catch (Exception e) {
+            log.info("签名值转换失败");
+            throw new RuntimeException("签名值转换失败," + e.getMessage());
+        }
+    }
+
+    /**
+     * ASN1Integer转32位byte
+     * @param s ASN1Integer
+     * @return byte32
+     */
+    private static byte[] encodeIntegerTo32Byte(byte[] s) {
+        if (s[0] != 2 || s[1] > 33) {
+            log.info("签名值长度错误");
+            throw new RuntimeException("签名值长度错误");
+        }
+        int length = s[1];
+        if (length == 33) {
+            if (s[2] != 0) {
+                throw new RuntimeException("签名值长度错误");
+            }
+            byte[] tem = new byte[32];
+            System.arraycopy(s, 3, tem, 0, 32);
+            return tem;
+        } else {
+            byte[] tem = new byte[32];
+            System.arraycopy(s, 2, tem, 32 - length, length);
+            return tem;
+        }
+    }
+
+    /**
+     * 64位签名值转换为128
+     *
+     * @param signData 需要转换的签名值
+     * @return 128位签名值
+     */
+    public static byte[] signValue64To128(byte[] signData) {
+        if (signData != null && signData.length == 64) {
+            //logger.info("将64的签名值转换成128:"+Base64EnOrDe.encode(signData));
+            byte[] sign_pre = new byte[128];
+            System.arraycopy(signData, 0, sign_pre, 32, 32);
+            System.arraycopy(signData, 32, sign_pre, 96, 32);
+            return sign_pre;
+        }
+        return signData;
     }
 }

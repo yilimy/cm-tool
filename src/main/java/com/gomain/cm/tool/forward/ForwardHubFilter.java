@@ -20,6 +20,8 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.HttpMultipartMode;
@@ -32,6 +34,9 @@ import org.springframework.http.HttpMethod;
 import org.springframework.util.ObjectUtils;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -45,6 +50,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -166,7 +172,7 @@ public class ForwardHubFilter implements Filter {
                 .build();
         httpRequestBase.setConfig(config);
         // 6. 提交请求
-        try (CloseableHttpClient httpClient = HttpClients.createDefault()){
+        try (CloseableHttpClient httpClient = createHttpClient(newUrl)){
             CloseableHttpResponse execute = httpClient.execute(httpRequestBase);
             // 打印结果需要读取流，尽量不要对源数据进行处理，只打印响应码
             int statusCode = execute.getStatusLine().getStatusCode();
@@ -195,6 +201,43 @@ public class ForwardHubFilter implements Filter {
         } catch (ClientProtocolException e) {
             log.error("转发失败: " + newUrl, e);
             throw new RuntimeException("转发失败, url=" + newUrl);
+        }
+    }
+
+    /**
+     * 根据url决定创建http还是https
+     * @param url 待转发的地址
+     * @return HttpClient
+     */
+    private CloseableHttpClient createHttpClient(String url) {
+        if (url.startsWith("http:")) {
+            return HttpClients.createDefault();
+        } else if (url.startsWith("https:")) {
+            try {
+                SSLContext ctx = SSLContext.getInstance("TLS");
+                X509TrustManager tm = new X509TrustManager() {
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] xcs, String string) {
+                    }
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] xcs, String string) {
+                    }
+
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return null;
+                    }
+                };
+                ctx.init(null, new TrustManager[]{tm}, null);
+                SSLConnectionSocketFactory ssf = new SSLConnectionSocketFactory(ctx, NoopHostnameVerifier.INSTANCE);
+                return HttpClients.custom().setSSLSocketFactory(ssf).build();
+            } catch (Exception e) {
+                log.error("创建https连接失败");
+                throw new RuntimeException(e);
+            }
+        } else {
+            throw new RuntimeException("转发地址不正确，请检查配置gd.host");
         }
     }
 
