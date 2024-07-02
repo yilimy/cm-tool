@@ -10,15 +10,23 @@ import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.DERBitString;
 import org.bouncycastle.asn1.DERSequence;
 import org.bouncycastle.asn1.gm.GMObjectIdentifiers;
+import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.asn1.x9.X9ObjectIdentifiers;
+import org.bouncycastle.crypto.params.ECDomainParameters;
+import org.bouncycastle.crypto.params.ECKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.bouncycastle.crypto.signers.DSAEncoding;
 import org.bouncycastle.crypto.signers.SM2Signer;
 import org.bouncycastle.jcajce.provider.asymmetric.util.ECUtil;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.math.ec.ECAlgorithms;
+import org.bouncycastle.math.ec.ECConstants;
+import org.bouncycastle.math.ec.ECPoint;
 import org.bouncycastle.pqc.math.linearalgebra.ByteUtils;
 import org.springframework.util.Assert;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.security.KeyFactory;
@@ -222,5 +230,85 @@ public class AlgorithmUtils {
             return sign_pre;
         }
         return signData;
+    }
+
+    /**
+     * 对已做过SM3摘要处理的数据，进行SM2签名验证
+     * @param cert 签名证书
+     * @param dataHash 已做过SM3摘要处理的数据
+     * @param signature 签名值
+     * @return 验证结果
+     */
+    @SneakyThrows
+    private boolean verifyWithSm3Digested(byte[] cert, byte[] dataHash, byte[] signature) {
+        org.bouncycastle.asn1.x509.Certificate cer = org.bouncycastle.asn1.x509.Certificate.getInstance(cert);
+        SubjectPublicKeyInfo publicKeyInfo = cer.getSubjectPublicKeyInfo();
+        byte[] pubKey = publicKeyInfo.getEncoded();
+        final BouncyCastleProvider bc = new BouncyCastleProvider();
+        KeyFactory keyFact = KeyFactory.getInstance("EC", bc);
+        // 读取公钥
+        PublicKey publicKey = keyFact.generatePublic(
+                new X509EncodedKeySpec(pubKey));
+
+        SM2Signer sm2Signer = new SM2Signer();
+        ECPublicKeyParameters parameters = (ECPublicKeyParameters) ECUtil
+                .generatePublicKeyParameter(publicKey);
+        // 12345678
+        sm2Signer.init(false, parameters);
+        Field encodingField = SM2Signer.class.getDeclaredField("encoding");
+        encodingField.setAccessible(true);
+        DSAEncoding encoding = (DSAEncoding) encodingField.get(sm2Signer);
+        Field ecParamsField = SM2Signer.class.getDeclaredField("ecParams");
+        ecParamsField.setAccessible(true);
+        ECDomainParameters ecParams = (ECDomainParameters) ecParamsField.get(sm2Signer);
+        BigInteger[] rs = encoding.decode(ecParams.getN(), signature);
+
+        BigInteger n = ecParams.getN();
+
+        BigInteger r = rs[0], s = rs[1];
+
+        // 5.3.1 Draft RFC:  SM2 Public Key Algorithms
+        // B1
+        if (r.compareTo(ECConstants.ONE) < 0 || r.compareTo(n) >= 0)
+        {
+            return false;
+        }
+
+        // B2
+        if (s.compareTo(ECConstants.ONE) < 0 || s.compareTo(n) >= 0)
+        {
+            return false;
+        }
+
+        // B3
+//        byte[] eHash = digestDoFinal();
+        byte[] eHash = dataHash;
+
+        // B4
+//        BigInteger e = calculateE(n, eHash);
+        BigInteger e = new BigInteger(1, eHash);
+
+        // B5
+        BigInteger t = r.add(s).mod(n);
+        if (t.equals(ECConstants.ONE))
+        {
+            return false;
+        }
+
+        // B6
+        Field ecKeyField = SM2Signer.class.getDeclaredField("ecKey");
+        ecKeyField.setAccessible(true);
+        ECKeyParameters ecKey = (ECKeyParameters) ecKeyField.get(sm2Signer);
+        ECPoint q = ((ECPublicKeyParameters)ecKey).getQ();
+        ECPoint x1y1 = ECAlgorithms.sumOfTwoMultiplies(ecParams.getG(), s, q, t).normalize();
+        if (x1y1.isInfinity())
+        {
+            return false;
+        }
+
+        // B7
+        BigInteger expectedR = e.add(x1y1.getAffineXCoord().toBigInteger()).mod(n);
+
+        return expectedR.equals(r);
     }
 }
